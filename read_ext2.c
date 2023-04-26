@@ -155,8 +155,7 @@ int read_group_descs( int                      fd,        /* the disk image file
 {
 		lseek(fd, BLOCK_OFFSET( BASE_OFFSET + 1 ), SEEK_SET);	// super block is one block
 		
-		read(fd, groups, num_groups * sizeof(struct ext2_group_desc) );
-
+		read(fd, groups, num_groups * sizeof(struct ext2_group_desc));
 
 		if (debug)
 		{
