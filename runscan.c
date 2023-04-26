@@ -27,9 +27,10 @@ int main(int argc, char **argv)
     struct ext2_group_desc group;
 
     // example read first the super-block and group-descriptor
-    read_super_block(fd, 0, &super);
-    read_group_desc(fd, 0, &group);
+    read_super_block(fd, &super);
+    printf("\n");
+    read_group_descs(fd, &group, super.s_blocks_count/ super.s_blocks_per_group);
 
-    
+    close(fd);
     return 0;
 }
