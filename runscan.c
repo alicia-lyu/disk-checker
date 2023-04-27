@@ -7,9 +7,9 @@
 #include <sys/types.h>
 #include <errno.h>
 
-void write_file_contents_to_output(int fd, struct ext2_inode** inode_ref, FILE* file_copy, char* file_contents_buffer);
+void write_file_contents_to_output(int fd, struct ext2_inode* inode, FILE* file_copy, char* file_contents_buffer);
 int create_dir(char* dirname);
-int get_offset_with_name_len(__u8 name_len);
+int get_offset_with_name_len(struct ext2_dir_entry_2* dir_entry);
 int is_jpg(struct ext2_inode inode, int img_fd);
 int write_file_details(const char *path, struct ext2_inode *inode);
 int copy_file_with_new_name(char* path, int img_fd, struct ext2_inode* inode);
@@ -34,7 +34,7 @@ int create_dir(char* dirname)
 struct jpg_file {
     __u32 inode_number;
     struct ext2_inode* inode;
-    char* filename;
+    char filename[EXT2_NAME_LEN];
     struct jpg_file* next;
 };
 
@@ -67,7 +67,6 @@ int main(int argc, char **argv)
 
     struct jpg_file* head = malloc(sizeof(struct jpg_file));
     head->next = NULL;
-    head->filename = NULL;
     head->inode = NULL;
     head->inode_number = 0;
     struct jpg_file* current = head;
@@ -93,9 +92,9 @@ int main(int argc, char **argv)
                 // add to the linked list
                 next_node = (struct jpg_file*) malloc(sizeof(struct jpg_file));
                 next_node->inode_number = j + 1;
-                next_node->inode = &inode;
+                next_node->inode = malloc(sizeof(struct ext2_inode));
+                memcpy(next_node->inode, &inode, sizeof(struct ext2_inode));
                 next_node->next = NULL;
-                next_node->filename = NULL;
                 current->next = next_node;
                 current = next_node;
             }
@@ -114,42 +113,49 @@ int main(int argc, char **argv)
             if (S_ISDIR(inode.i_mode)) {
                 // store all dir entries in dir_entries
                 struct ext2_dir_entry_2* dir_entries = (struct ext2_dir_entry_2*) malloc(block_size);
-                // off_t data_block_offset = locate_data_blocks(i, groups);
                 lseek(fd, BLOCK_OFFSET(inode.i_block[0]), SEEK_SET);
                 read(fd, dir_entries, block_size);
                 // iterate through all dir entries
                 void* ptr = (void*) dir_entries;
                 while (ptr < (void*) dir_entries + block_size) {
                     struct ext2_dir_entry_2* dir_entry = ((struct ext2_dir_entry_2*) ptr);
+                    if (dir_entry->inode == 0) {
+                        ptr += get_offset_with_name_len(dir_entry);
+                        continue;
+                    }
                     // get filename of dir_entry
-                    char* filename = (char*) malloc(dir_entry->name_len + 1);
-                    memcpy(filename, dir_entry->name, dir_entry->name_len);
-                    filename[dir_entry->name_len] = '\0';
+                    char filename[EXT2_NAME_LEN];
+                    int name_len = dir_entry->name_len & 0xFF;
+                    printf("rec_len: %d\n", dir_entry->rec_len);
+                    printf("name_len: %d\n", name_len);
+                    printf("calculated len: %d\n", get_offset_with_name_len(dir_entry));
+                    strncpy(filename, dir_entry->name, name_len);
+                    filename[name_len] = '\0';
                     if (debug) printf("Found directory entry: %d, %s\n", dir_entry->inode, dir_entry->name);
                     if (strcmp(filename, ".") == 0 || strcmp(filename, "..") == 0) {
-                        ptr += dir_entry->rec_len;
+                        ptr += get_offset_with_name_len(dir_entry);
                         continue;
                     }
                     // store filename in linked list if it is a jpg
                     current = head;
-                    while (current->next != NULL) {
+                    while (current != NULL) {
                         if (current->inode_number == dir_entry->inode) {
-                            current->filename = filename;
+                            strcpy(current->filename, filename);
+                            if (debug) printf("Found filename of jpg: %s with inode number %d\n", filename, dir_entry->inode);
                             break;
-                            if (debug) printf("Found filename of jpg: %s\n", filename);
                         }
                         current = current->next;
                     }
                     
-                    ptr += dir_entry->rec_len;
+                    ptr += get_offset_with_name_len(dir_entry);
                 }
-
+                free(dir_entries);
             }
         }
     }
     // copy jpgs to output directory with different filenames
     current = head;
-    while (current->next != NULL) {
+    while (current != NULL) {
         struct jpg_file* jpg_file = current;
         // copy the data to the path with inode
         char path_inode[100];
@@ -157,7 +163,7 @@ int main(int argc, char **argv)
         int copy_ret = copy_file_with_new_name(path_inode, fd, jpg_file->inode);
         if (copy_ret) exit(1);
         // copy the data to the path with filename
-        char path_filename[100];
+        char path_filename[EXT2_NAME_LEN + 100];
         sprintf(path_filename, "%s/%s", argv[2], jpg_file->filename);
         copy_ret = copy_file_with_new_name(path_filename, fd, jpg_file->inode);
         if (copy_ret) exit(1);
@@ -168,14 +174,26 @@ int main(int argc, char **argv)
         sprintf(details, "%d\n", jpg_file->inode_number);
         int write_details_ret = write_file_details(path_details, jpg_file->inode);
         if (write_details_ret) exit(1);
+        free(details);
+        current = current->next;
+    }
+
+    // free linked list
+    current = head;
+    while (current != NULL) {
+        next_node = current->next;
+        free(current->inode);
+        free(current);
+        current = next_node;
     }
     free(groups);
     close(fd);
     return 0;
 }
 
-int get_offset_with_name_len(__u8 name_len) {
-    return ((((int)name_len) + 4) / 4) * 4 + 8;
+int get_offset_with_name_len(struct ext2_dir_entry_2* dir_entry) {
+    int name_len = dir_entry->name_len & 0xFF;
+    return ((name_len + 8 + 4-1) / 4) * 4;
 }
 
 int write_file_details(const char *path, struct ext2_inode *inode) {
@@ -202,7 +220,7 @@ int copy_file_with_new_name(char* path, int img_fd, struct ext2_inode* inode)
         return 1;
     }
     char* file_contents_buffer = (char*) malloc(block_size);
-    write_file_contents_to_output(img_fd, &inode, file_copy, file_contents_buffer);
+    write_file_contents_to_output(img_fd, inode, file_copy, file_contents_buffer);
     // write file details
     fclose(file_copy);
     free(file_contents_buffer);
@@ -231,10 +249,9 @@ int is_jpg(struct ext2_inode inode, int img_fd)
     return flag;
 }
 
-void write_file_contents_to_output(int fd, struct ext2_inode** inode_ref, FILE* file_copy, char* file_contents_buffer)
+void write_file_contents_to_output(int fd, struct ext2_inode* inode, FILE* file_copy, char* file_contents_buffer)
 {
     // Calculate the number of blocks required to store the file
-    struct ext2_inode* inode = *inode_ref;
     unsigned int blocks_required = (inode->i_size + block_size - 1) / block_size; // Round up
     __u32* single_indirect_block = (__u32*) malloc(block_size);
     __u32* double_indirect_block = (__u32*) malloc(block_size);

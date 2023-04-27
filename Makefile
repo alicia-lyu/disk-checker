@@ -6,13 +6,13 @@ EXEC = runscan
 MAIN.C = runscan.c
 
 restart: clean $(EXEC)
-	$(EXEC) ./disk_images/image-01 output
+	$(EXEC) ./disk_images/image-02 output
 
 default: $(EXEC)
 	$(EXEC) ./disk_images/image-02 output
 
-gdb: $(EXEC)
-	gdb $(EXEC)
+gdb: clean $(EXEC)
+	gdb --args $(EXEC) ./disk_images/image-02 output
 
 clean:
 	rm -f $(EXEC)
