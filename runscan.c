@@ -10,7 +10,7 @@
 void write_file_contents_to_output(int fd, struct ext2_inode* inode, FILE* file_copy, char* file_contents_buffer);
 int create_dir(char* dirname);
 int get_offset_with_name_len(struct ext2_dir_entry_2* dir_entry);
-int is_jpg(struct ext2_inode inode, int img_fd);
+int is_jpg(struct ext2_inode* inode, int img_fd);
 int write_file_details(const char *path, struct ext2_inode *inode);
 int copy_file_with_new_name(char* path, int img_fd, struct ext2_inode* inode);
 
@@ -78,12 +78,12 @@ int main(int argc, char **argv)
         // Iterate through all the inodes in the block group
         for (__u32 j = 0; j < super.s_inodes_per_group; j++) 
         {
-            struct ext2_inode inode;
-            read_inode(fd, inode_table_offset, j + 1, &inode, super.s_inode_size); // ext 2 inode numbers start at 1
-            if (S_ISREG(inode.i_mode)) {
+            struct ext2_inode* inode = malloc(sizeof(struct ext2_inode));
+            read_inode(fd, inode_table_offset, j + 1, inode, super.s_inode_size); // ext 2 inode numbers start at 1
+            if (S_ISREG(inode->i_mode)) {
                 if (debug){
                     printf("Found inode %d\n", j + 1);
-                    printf("File size: %d\n", inode.i_size);
+                    printf("File size: %d\n", inode->i_size);
                 }
                 // Inspect if file is jpg
                 int is_jpg_flag = is_jpg(inode, fd);
@@ -93,11 +93,12 @@ int main(int argc, char **argv)
                 next_node = (struct jpg_file*) malloc(sizeof(struct jpg_file));
                 next_node->inode_number = j + 1;
                 next_node->inode = malloc(sizeof(struct ext2_inode));
-                memcpy(next_node->inode, &inode, sizeof(struct ext2_inode));
-                next_node->next = NULL;
+                memcpy(next_node->inode, inode, sizeof(struct ext2_inode));
+                printf("Copied inode %u, size %u, links count %u, owner id %u\n", next_node->inode_number, next_node->inode->i_size, next_node->inode->i_links_count, next_node->inode->i_uid);
                 current->next = next_node;
                 current = next_node;
             }
+            free(inode);
         }
     }
     
@@ -126,12 +127,14 @@ int main(int argc, char **argv)
                     // get filename of dir_entry
                     char filename[EXT2_NAME_LEN];
                     int name_len = dir_entry->name_len & 0xFF;
-                    printf("rec_len: %d\n", dir_entry->rec_len);
-                    printf("name_len: %d\n", name_len);
-                    printf("calculated len: %d\n", get_offset_with_name_len(dir_entry));
+                    // if (debug) {
+                    //     printf("rec_len: %d\n", dir_entry->rec_len);
+                    //     printf("name_len: %d\n", name_len);
+                    //     printf("calculated len: %d\n", get_offset_with_name_len(dir_entry));
+                    // }
                     strncpy(filename, dir_entry->name, name_len);
                     filename[name_len] = '\0';
-                    if (debug) printf("Found directory entry: %d, %s\n", dir_entry->inode, dir_entry->name);
+                    // if (debug) printf("Found directory entry: %d, %s\n", dir_entry->inode, dir_entry->name);
                     if (strcmp(filename, ".") == 0 || strcmp(filename, "..") == 0) {
                         ptr += get_offset_with_name_len(dir_entry);
                         continue;
@@ -154,7 +157,7 @@ int main(int argc, char **argv)
         }
     }
     // copy jpgs to output directory with different filenames
-    current = head;
+    current = head->next;
     while (current != NULL) {
         struct jpg_file* jpg_file = current;
         // copy the data to the path with inode
@@ -227,12 +230,12 @@ int copy_file_with_new_name(char* path, int img_fd, struct ext2_inode* inode)
     return 0;
 }
 
-int is_jpg(struct ext2_inode inode, int img_fd) 
+int is_jpg(struct ext2_inode* inode, int img_fd) 
 {
     char* buffer = (char*) malloc(block_size);
     int flag = 0;
     // Read the first block of the file into the buffer
-    off_t first_block_offset = BLOCK_OFFSET(inode.i_block[0]);
+    off_t first_block_offset = BLOCK_OFFSET(inode->i_block[0]);
     lseek(img_fd, first_block_offset, SEEK_SET);
     read(img_fd, buffer, block_size);     
     if (buffer[0] == (char)0xff &&
