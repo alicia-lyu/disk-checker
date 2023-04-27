@@ -40,8 +40,7 @@ int main(int argc, char **argv)
         {
             struct ext2_inode inode;
             read_inode(fd, inode_table_offset, j + 1, &inode, super.s_inode_size); // ext 2 inode numbers start at 1
-            if (S_ISREG(inode.i_mode))
-            {
+            if (S_ISREG(inode.i_mode)) {
                 if (debug){
                     printf("Found inode %d\n", j + 1);
                     printf("File size: %d\n", inode.i_size);
@@ -81,7 +80,12 @@ int main(int argc, char **argv)
                         exit(1);
                     }
                     char* file_contents_buffer = (char*) malloc(block_size);
+                    // search for file name
+                    search_for_file_name(j + 1);
+                    // write file contents to output, using inode number and file name to create two identical files
+                    // TODO: open a file with real filename, pass its decriptor and real filenames to write_file_contents_to_output
                     write_file_contents_to_output(fd, &inode, jpg, file_contents_buffer, block_size);
+                    // write file details
                     fclose(jpg);
                     free(file_contents_buffer);
                 }
