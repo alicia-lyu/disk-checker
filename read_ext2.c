@@ -188,8 +188,8 @@ off_t locate_inode_table( int ngroup, const struct ext2_group_desc *groups      
 	return BLOCK_OFFSET( groups[ngroup].bg_inode_table );
 }
 
-/* calculate the start address of the data blocks in the first group */
-off_t locate_data_blocks( int ngroup, const struct ext2_group_desc *groups      /* the first group-descriptor */
+/* calculate the start address of the data blocks in the nth group */
+off_t locate_data_blocks( int ngroup, const struct ext2_group_desc *groups      /* the group-descriptor */
 							    )
 {
 	return BLOCK_OFFSET( groups[ngroup].bg_inode_table + itable_blocks );

@@ -30,7 +30,7 @@ int create_dir(char* dirname)
         return 1;
     }
 }
-// To-Do revise all the code changes since last commit
+
 struct jpg_file {
     __u32 inode_number;
     struct ext2_inode* inode;
@@ -90,6 +90,7 @@ int main(int argc, char **argv)
                 int is_jpg_flag = is_jpg(inode, fd);
                 if (!is_jpg_flag) continue;
                 if (debug) printf("Inode %d is a jpg\n", j + 1);
+                // add to the linked list
                 next_node = (struct jpg_file*) malloc(sizeof(struct jpg_file));
                 next_node->inode_number = j + 1;
                 next_node->inode = &inode;
@@ -113,26 +114,26 @@ int main(int argc, char **argv)
             if (S_ISDIR(inode.i_mode)) {
                 // store all dir entries in dir_entries
                 struct ext2_dir_entry_2* dir_entries = (struct ext2_dir_entry_2*) malloc(block_size);
-                off_t data_block_offset = locate_data_blocks(i, groups);
-                lseek(fd, data_block_offset + BLOCK_OFFSET(inode.i_block[0]), SEEK_SET);
+                // off_t data_block_offset = locate_data_blocks(i, groups);
+                lseek(fd, BLOCK_OFFSET(inode.i_block[0]), SEEK_SET);
                 read(fd, dir_entries, block_size);
                 // iterate through all dir entries
-                off_t offset = 0;
-                while (offset < inode.i_size) {
-                    struct ext2_dir_entry_2 dir_entry = dir_entries[offset];
+                void* ptr = (void*) dir_entries;
+                while (ptr < (void*) dir_entries + block_size) {
+                    struct ext2_dir_entry_2* dir_entry = ((struct ext2_dir_entry_2*) ptr);
                     // get filename of dir_entry
-                    char* filename = (char*) malloc(dir_entry.name_len + 1);
-                    memcpy(filename, dir_entry.name, dir_entry.name_len);
-                    filename[dir_entry.name_len] = '\0';
-                    if (debug) printf("Found directory entry: %s\n", filename);
+                    char* filename = (char*) malloc(dir_entry->name_len + 1);
+                    memcpy(filename, dir_entry->name, dir_entry->name_len);
+                    filename[dir_entry->name_len] = '\0';
+                    if (debug) printf("Found directory entry: %d, %s\n", dir_entry->inode, dir_entry->name);
                     if (strcmp(filename, ".") == 0 || strcmp(filename, "..") == 0) {
-                        offset += get_offset_with_name_len(dir_entry.name_len);
+                        ptr += dir_entry->rec_len;
                         continue;
                     }
                     // store filename in linked list if it is a jpg
                     current = head;
                     while (current->next != NULL) {
-                        if (current->inode_number == dir_entry.inode) {
+                        if (current->inode_number == dir_entry->inode) {
                             current->filename = filename;
                             break;
                             if (debug) printf("Found filename of jpg: %s\n", filename);
@@ -140,7 +141,7 @@ int main(int argc, char **argv)
                         current = current->next;
                     }
                     
-                    offset += get_offset_with_name_len(dir_entry.name_len);
+                    ptr += dir_entry->rec_len;
                 }
 
             }
