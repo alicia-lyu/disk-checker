@@ -5,6 +5,7 @@
 #include <string.h>
 #include <sys/stat.h>
 #include <sys/types.h>
+#include <errno.h>
 void write_file_contents_to_output(int fd, struct ext2_inode* inode, FILE* jpg, char* file_contents_buffer, int block_size);
 int main(int argc, char **argv) 
 {
@@ -59,24 +60,33 @@ int main(int argc, char **argv)
                     buffer[3] == (char)0xe8)) 
                 {
                     // jpg signature found
-                    printf("Inode %d is a jpg\n", j + 1);
+                    if (debug)
+                        printf("Inode %d is a jpg\n", j + 1);
+
                     char filename1[100];
+                    //create directory argv[2] if not exists using makedir, detect existence using opendir
+                    DIR* dir = opendir(argv[2]);
+                    if (dir) {
+                        closedir(dir);
+                    } else if (errno == ENOENT) {
+                        mkdir(argv[2], 0777);
+                    } else {
+                        printf("Error creating directory\n");
+                        exit(1);
+                    }
                     sprintf(filename1, "%s/file-%d.jpg", argv[2], j + 1);
                     FILE* jpg = fopen(filename1, "w");
-                    // write whole file to the jpg
-                    // buffer is one block and we already read the first block
-                    // buffer will be reused to read the other blocks
-                    // Write data blocks to the jpg file
-                    char* indirect_block_buffer = (char*) malloc(block_size);
+                    if (jpg == NULL) {
+                        printf("Error creating file\n");
+                        exit(1);
+                    }
                     char* file_contents_buffer = (char*) malloc(block_size);
                     write_file_contents_to_output(fd, &inode, jpg, file_contents_buffer, block_size);
                     fclose(jpg);
-                    free(indirect_block_buffer);
                     free(file_contents_buffer);
                 }
                 free(buffer);
             }
-
         }
     }
     free(groups);
@@ -122,10 +132,14 @@ void write_file_contents_to_output(int fd, struct ext2_inode* inode, FILE* jpg, 
 
         // Read the block into the buffer
         lseek(fd, block_offset, SEEK_SET);
-        read(fd, file_contents_buffer, block_size);
+        ssize_t bytes_read = read(fd, file_contents_buffer, block_size);
 
         // Write the block to the jpg file
-        fwrite(file_contents_buffer, 1, 1024, jpg);
+        ssize_t bytes_to_write = bytes_read;
+        if (k == blocks_required - 1) { // Last block
+            bytes_to_write = inode->i_size - block_size * (blocks_required - 1);
+        }
+        fwrite(file_contents_buffer, 1, bytes_to_write, jpg);
     }
     free(single_indirect_block);
     free(double_indirect_block);
