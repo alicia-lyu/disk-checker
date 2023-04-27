@@ -7,7 +7,7 @@
 #include <sys/types.h>
 #include <errno.h>
 
-void write_file_contents_to_output(int fd, struct ext2_inode** inode_ref, FILE* file_inode_number_jpg, char* file_contents_buffer);
+void write_file_contents_to_output(int fd, struct ext2_inode** inode_ref, FILE* file_copy, char* file_contents_buffer);
 int create_dir(char* dirname);
 int is_jpg(struct ext2_inode inode, int img_fd);
 void search_for_filename(int inode_number, char* original_filename);
@@ -29,6 +29,11 @@ int create_dir(char* dirname)
         return 1;
     }
 }
+// To-Do revise all the code changes since last commit
+struct jpg_file {
+    int inode_number;
+    char* filename;
+};
 
 int main(int argc, char **argv) 
 {
@@ -58,7 +63,9 @@ int main(int argc, char **argv)
     int num_groups = super.s_blocks_count/ super.s_blocks_per_group;
     struct ext2_group_desc* groups = malloc(num_groups * sizeof(struct ext2_group_desc));
     read_group_descs(fd, groups, num_groups);
-    // iterate through all block groups
+
+    int num_jpg = 0;
+    // get inodes of all jpgs
     for (int i = 0; i < num_groups; i++) 
     {
         off_t inode_table_offset = locate_inode_table(i, groups);
@@ -76,19 +83,61 @@ int main(int argc, char **argv)
                 int is_jpg_flag = is_jpg(inode, fd);
                 if (!is_jpg_flag) continue;
                 if (debug) printf("Inode %d is a jpg\n", j + 1);
-
-                char path_inode[100];
-                sprintf(path_inode, "%s/file-%d.jpg", argv[2], j+1);
-                int copy_ret = copy_file_with_new_name(path_inode, fd, &inode);
-                if (copy_ret) exit(1);
-
-                // TODO: open a file with real filename, pass its decriptor and real filenames to write_file_contents_to_output
-                // search for file name
-                char * original_filename = malloc(EXT2_NAME_LEN * sizeof(char));
-                search_for_filename(j + 1, original_filename); // j + 1 is the inode number
-                // write file contents to output, using inode number and file name to create two identical files
+                num_jpg++;
             }
         }
+    }
+    printf("Total number of jpgs found: %d\n", num_jpg);
+    struct jpg_file* jpg_files = (struct jpg_file*) malloc(num_jpg * sizeof(struct jpg_file));
+    
+    // add filenames to jpg_files
+    for (int i = 0; i < num_groups; i++) 
+    {
+        off_t inode_table_offset = locate_inode_table(i, groups);
+        // Iterate through all the inodes in the block group
+        for (__u32 j = 0; j < super.s_inodes_per_group; j++) 
+        {
+            struct ext2_inode inode;
+            read_inode(fd, inode_table_offset, j + 1, &inode, super.s_inode_size); // ext 2 inode numbers start at 1
+            if (S_ISDIR(inode.i_mode)) {
+                // iterate through all directory entries in data block
+                struct ext2_dir_entry_2* dir_entries = (struct ext2_dir_entry_2*) malloc(block_size);
+                off_t data_block_offset = locate_data_blocks(i, groups);
+                lseek(fd, data_block_offset + BLOCK_OFFSET(inode.i_block[0]), SEEK_SET);
+                read(fd, dir_entries, block_size);
+                off_t offset = 0;
+                while (offset < inode.i_size) {
+                    struct ext2_dir_entry_2 dir_entry = dir_entries[offset];
+                    char* filename = (char*) malloc(dir_entry.name_len + 1);
+                    memcpy(filename, dir_entry.name, dir_entry.name_len);
+                    filename[dir_entry.name_len] = '\0';
+                    if (debug) printf("Found directory entry: %s\n", filename);
+                    if (strcmp(filename, ".") == 0 || strcmp(filename, "..") == 0) {
+                        offset += dir_entry.name_len + 8;
+                        continue;
+                    }
+                    char* original_filename = dir_entry.name;
+                    for (int i = 0; i< num_jpg; i++) {
+                        struct jpg_file jpg_file = jpg_files[i];
+                        if (dir_entry.inode == jpg_file.inode_number) {
+                            jpg_file.filename = original_filename;
+                            break;
+                        }
+                    }
+                    if (debug) printf("Found original filename: %s\n", original_filename);
+                    offset += dir_entry.name_len + 8;
+                }
+
+            }
+        }
+    }
+    // copy jpgs to output directory with different filenames
+    for (int i = 0; i< num_jpg; i++) {
+        struct jpg_file jpg_file = jpg_files[i];
+        char path_inode[100];
+        sprintf(path_inode, "%s/file-%d.jpg", argv[2], j+1);
+        int copy_ret = copy_file_with_new_name(path_inode, fd, &inode);
+        if (copy_ret) exit(1);
     }
     free(groups);
     close(fd);
@@ -134,7 +183,6 @@ int is_jpg(struct ext2_inode inode, int img_fd)
 
 void search_for_filename(int inode_number, char* original_filename)
 {
-
     // Put filename in original_filename and return
     int a = inode_number;
     char* b = original_filename;
@@ -143,7 +191,7 @@ void search_for_filename(int inode_number, char* original_filename)
     return;
 }
 
-void write_file_contents_to_output(int fd, struct ext2_inode** inode_ref, FILE* file_inode_number_jpg, char* file_contents_buffer)
+void write_file_contents_to_output(int fd, struct ext2_inode** inode_ref, FILE* file_copy, char* file_contents_buffer)
 {
     // Calculate the number of blocks required to store the file
     struct ext2_inode* inode = *inode_ref;
@@ -189,7 +237,7 @@ void write_file_contents_to_output(int fd, struct ext2_inode** inode_ref, FILE* 
         if (k == blocks_required - 1) { // Last block
             bytes_to_write = inode->i_size - block_size * (blocks_required - 1);
         }
-        fwrite(file_contents_buffer, 1, bytes_to_write, file_inode_number_jpg);
+        fwrite(file_contents_buffer, 1, bytes_to_write, file_copy);
     }
     free(single_indirect_block);
     free(double_indirect_block);
