@@ -8,7 +8,7 @@ MAIN.C = runscan.c
 
 
 default: $(EXEC)
-	$(EXEC) ../disk_images/image-02 output
+	$(EXEC) ./disk_images/image-02 output
 
 gdb: $(EXEC)
 	gdb $(EXEC)

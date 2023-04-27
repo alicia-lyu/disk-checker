@@ -6,7 +6,29 @@
 #include <sys/stat.h>
 #include <sys/types.h>
 #include <errno.h>
-void write_file_contents_to_output(int fd, struct ext2_inode* inode, FILE* file_inode_number_jpg, char* file_contents_buffer, int block_size);
+
+void write_file_contents_to_output(int fd, struct ext2_inode* inode, FILE* file_inode_number_jpg, char* file_contents_buffer);
+int create_dir(char* dirname);
+int is_jpg(struct ext2_inode inode, int img_fd);
+void search_for_filename(int inode_number, char* original_filename);
+
+int create_dir(char* dirname)
+{
+    // Create directory argv[2] if not exists using mkdir, detect existence using opendir
+    DIR* dir = opendir(dirname);
+    if (dir) {
+        closedir(dir);
+        printf("Output dir already exists\n");
+        return 1;
+    } else if (errno == ENOENT) {
+        mkdir(dirname, 0777);
+        return 0;
+    } else {
+        printf("Error creating directory\n");
+        return 1;
+    }
+}
+
 int main(int argc, char **argv) 
 {
     if (argc != 3) 
@@ -20,6 +42,9 @@ int main(int argc, char **argv)
 
     int fd;
     fd = open(argv[1], O_RDONLY);    /* open disk image */
+    
+    char* dirname = argv[2];
+    create_dir(dirname);
 
     ext2_read_init(fd);
 
@@ -44,53 +69,29 @@ int main(int argc, char **argv)
                 if (debug){
                     printf("Found inode %d\n", j + 1);
                     printf("File size: %d\n", inode.i_size);
-                } 
-                char* buffer = (char*) malloc(block_size);
-                // Read the first block of the file into the buffer
-                off_t first_block_offset = BLOCK_OFFSET(inode.i_block[0]);
-                lseek(fd, first_block_offset, SEEK_SET);
-                read(fd, buffer, block_size);     
-                // int is_jpg = 0; 
-                if (buffer[0] == (char)0xff &&
-                    buffer[1] == (char)0xd8 &&
-                    buffer[2] == (char)0xff &&
-                    (buffer[3] == (char)0xe0 ||
-                    buffer[3] == (char)0xe1 ||
-                    buffer[3] == (char)0xe8)) 
-                {
-                    // jpg signature found
-                    if (debug)
-                        printf("Inode %d is a jpg\n", j + 1);
-
-                    char file_output[100];
-                    //create directory argv[2] if not exists using makedir, detect existence using opendir
-                    DIR* dir = opendir(argv[2]);
-                    if (dir) {
-                        closedir(dir);
-                    } else if (errno == ENOENT) {
-                        mkdir(argv[2], 0777);
-                    } else {
-                        printf("Error creating directory\n");
-                        exit(1);
-                    }
-                    sprintf(file_output, "%s/file-%d.jpg", argv[2], j + 1);
-                    FILE* file_inode_number_jpg = fopen(file_output, "w");
-                    if (file_inode_number_jpg == NULL) {
-                        printf("Error creating file\n");
-                        exit(1);
-                    }
-                    char* file_contents_buffer = (char*) malloc(block_size);
-                    // search for file name
-                    char * original_filename = malloc(EXT2_NAME_LEN * sizeof(char));
-                    search_for_file_name(j + 1, original_filename); // j + 1 is the inode number
-                    // write file contents to output, using inode number and file name to create two identical files
-                    // TODO: open a file with real filename, pass its decriptor and real filenames to write_file_contents_to_output
-                    write_file_contents_to_output(fd, &inode, file_inode_number_jpg, file_contents_buffer, block_size);
-                    // write file details
-                    fclose(file_inode_number_jpg);
-                    free(file_contents_buffer);
                 }
-                free(buffer);
+                // Inspect if file is jpg
+                int is_jpg_flag = is_jpg(inode, fd);
+                if (!is_jpg_flag) continue;
+                if (debug) printf("Inode %d is a jpg\n", j + 1);
+                char file_output[100];
+                // Create output file with inode
+                sprintf(file_output, "%s/file-%d.jpg", argv[2], j + 1);
+                FILE* file_inode_number_jpg = fopen(file_output, "w");
+                if (file_inode_number_jpg == NULL) {
+                    printf("Error creating file\n");
+                    exit(1);
+                }
+                // TODO: open a file with real filename, pass its decriptor and real filenames to write_file_contents_to_output
+                // search for file name
+                char * original_filename = malloc(EXT2_NAME_LEN * sizeof(char));
+                search_for_filename(j + 1, original_filename); // j + 1 is the inode number
+                // write file contents to output, using inode number and file name to create two identical files
+                char* file_contents_buffer = (char*) malloc(block_size);
+                write_file_contents_to_output(fd, &inode, file_inode_number_jpg, file_contents_buffer);
+                // write file details
+                fclose(file_inode_number_jpg);
+                free(file_contents_buffer);
             }
         }
     }
@@ -99,14 +100,39 @@ int main(int argc, char **argv)
     return 0;
 }
 
+int is_jpg(struct ext2_inode inode, int img_fd) {
+    char* buffer = (char*) malloc(block_size);
+    int flag = 0;
+    // Read the first block of the file into the buffer
+    off_t first_block_offset = BLOCK_OFFSET(inode.i_block[0]);
+    lseek(img_fd, first_block_offset, SEEK_SET);
+    read(img_fd, buffer, block_size);     
+    if (buffer[0] == (char)0xff &&
+        buffer[1] == (char)0xd8 &&
+        buffer[2] == (char)0xff &&
+        (buffer[3] == (char)0xe0 ||
+        buffer[3] == (char)0xe1 ||
+        buffer[3] == (char)0xe8)) 
+    {
+        // jpg signature found
+        flag = 1;
+    }
+    free(buffer);
+    return flag;
+}
+
 void search_for_filename(int inode_number, char* original_filename)
 {
 
     // Put filename in original_filename and return
+    int a = inode_number;
+    char* b = original_filename;
+    a++;
+    b++;
     return;
 }
 
-void write_file_contents_to_output(int fd, struct ext2_inode* inode, FILE* file_inode_number_jpg, char* file_contents_buffer, int block_size)
+void write_file_contents_to_output(int fd, struct ext2_inode* inode, FILE* file_inode_number_jpg, char* file_contents_buffer)
 {
     // Calculate the number of blocks required to store the file
     unsigned int blocks_required = (inode->i_size + block_size - 1) / block_size; // Round up
