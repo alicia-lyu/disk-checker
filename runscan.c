@@ -6,7 +6,7 @@
 #include <sys/stat.h>
 #include <sys/types.h>
 #include <errno.h>
-void write_file_contents_to_output(int fd, struct ext2_inode* inode, FILE* jpg, char* file_contents_buffer, int block_size);
+void write_file_contents_to_output(int fd, struct ext2_inode* inode, FILE* file_inode_number_jpg, char* file_contents_buffer, int block_size);
 int main(int argc, char **argv) 
 {
     if (argc != 3) 
@@ -62,7 +62,7 @@ int main(int argc, char **argv)
                     if (debug)
                         printf("Inode %d is a jpg\n", j + 1);
 
-                    char filename1[100];
+                    char file_output[100];
                     //create directory argv[2] if not exists using makedir, detect existence using opendir
                     DIR* dir = opendir(argv[2]);
                     if (dir) {
@@ -73,20 +73,21 @@ int main(int argc, char **argv)
                         printf("Error creating directory\n");
                         exit(1);
                     }
-                    sprintf(filename1, "%s/file-%d.jpg", argv[2], j + 1);
-                    FILE* jpg = fopen(filename1, "w");
-                    if (jpg == NULL) {
+                    sprintf(file_output, "%s/file-%d.jpg", argv[2], j + 1);
+                    FILE* file_inode_number_jpg = fopen(file_output, "w");
+                    if (file_inode_number_jpg == NULL) {
                         printf("Error creating file\n");
                         exit(1);
                     }
                     char* file_contents_buffer = (char*) malloc(block_size);
                     // search for file name
-                    search_for_file_name(j + 1);
+                    char * original_filename = malloc(EXT2_NAME_LEN * sizeof(char));
+                    search_for_file_name(j + 1, original_filename); // j + 1 is the inode number
                     // write file contents to output, using inode number and file name to create two identical files
                     // TODO: open a file with real filename, pass its decriptor and real filenames to write_file_contents_to_output
-                    write_file_contents_to_output(fd, &inode, jpg, file_contents_buffer, block_size);
+                    write_file_contents_to_output(fd, &inode, file_inode_number_jpg, file_contents_buffer, block_size);
                     // write file details
-                    fclose(jpg);
+                    fclose(file_inode_number_jpg);
                     free(file_contents_buffer);
                 }
                 free(buffer);
@@ -98,7 +99,14 @@ int main(int argc, char **argv)
     return 0;
 }
 
-void write_file_contents_to_output(int fd, struct ext2_inode* inode, FILE* jpg, char* file_contents_buffer, int block_size)
+void search_for_filename(int inode_number, char* original_filename)
+{
+
+    // Put filename in original_filename and return
+    return;
+}
+
+void write_file_contents_to_output(int fd, struct ext2_inode* inode, FILE* file_inode_number_jpg, char* file_contents_buffer, int block_size)
 {
     // Calculate the number of blocks required to store the file
     unsigned int blocks_required = (inode->i_size + block_size - 1) / block_size; // Round up
@@ -143,7 +151,7 @@ void write_file_contents_to_output(int fd, struct ext2_inode* inode, FILE* jpg, 
         if (k == blocks_required - 1) { // Last block
             bytes_to_write = inode->i_size - block_size * (blocks_required - 1);
         }
-        fwrite(file_contents_buffer, 1, bytes_to_write, jpg);
+        fwrite(file_contents_buffer, 1, bytes_to_write, file_inode_number_jpg);
     }
     free(single_indirect_block);
     free(double_indirect_block);
