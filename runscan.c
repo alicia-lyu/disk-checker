@@ -187,14 +187,14 @@ void add_filename_to_lk(struct jpg_file** head_ref, int num_groups, struct ext2_
                     // get filename of dir_entry
                     char filename[EXT2_NAME_LEN];
                     int name_len = dir_entry->name_len & 0xFF;
-                    // if (debug) {
-                    //     printf("rec_len: %d\n", dir_entry->rec_len);
-                    //     printf("name_len: %d\n", name_len);
-                    //     printf("calculated len: %d\n", get_offset_with_name_len(dir_entry));
-                    // }
+                    if (debug) {
+                        printf("rec_len: %d\n", dir_entry->rec_len);
+                        printf("name_len: %d\n", name_len);
+                        printf("calculated len: %d\n", get_offset_with_name_len(dir_entry));
+                    }
                     strncpy(filename, dir_entry->name, name_len);
                     filename[name_len] = '\0';
-                    // if (debug) printf("Found directory entry: %d, %s\n", dir_entry->inode, dir_entry->name);
+                    if (debug) printf("Found directory entry: %d, %s\n", dir_entry->inode, dir_entry->name);
                     if (strcmp(filename, ".") == 0 || strcmp(filename, "..") == 0) {
                         ptr += get_offset_with_name_len(dir_entry);
                         continue;
