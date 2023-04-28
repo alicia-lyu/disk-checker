@@ -109,8 +109,9 @@ int create_dir(char* dirname)
     DIR* dir = opendir(dirname);
     if (dir) {
         closedir(dir);
-        printf("Output dir already exists\n");
-        return 1;
+        if (debug)
+            printf("Output dir already exists\n");
+        return 0;
     } else if (errno == ENOENT) {
         mkdir(dirname, 0777);
         return 0;
@@ -232,7 +233,7 @@ int write_file_details(const char *path, struct ext2_inode *inode) {
 
     fprintf(file, "%u\n", inode->i_links_count);
     fprintf(file, "%u\n", inode->i_size);
-    fprintf(file, "%u\n", inode->i_uid);
+    fprintf(file, "%u", inode->i_uid);
 
     fclose(file);
     return 0;

@@ -9,7 +9,6 @@ restart: clean $(EXEC)
 	$(EXEC) ./disk_images/image-02 output
 
 default: $(EXEC)
-	$(EXEC) ./disk_images/image-02 output
 
 gdb: clean $(EXEC)
 	gdb --args $(EXEC) ./disk_images/image-02 output
