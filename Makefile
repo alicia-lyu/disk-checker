@@ -11,7 +11,7 @@ restart: clean $(EXEC)
 default: $(EXEC)
 
 gdb: clean $(EXEC)
-	gdb --args $(EXEC) ./disk_images/image-02 output
+	gdb $(EXEC)
 
 clean:
 	rm -f $(EXEC)
