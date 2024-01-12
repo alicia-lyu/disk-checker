@@ -1,9 +1,12 @@
-READ ME
+# Ext2 Disk Image Checker
 
-* group number: 21
-* name: Alicia Lyu, Shuyao Li
-* cs login: wenhui, shuyaol
-* wisc ID: wlyu27, sli796
-* email: wlyu27@wisc.edu, sli796@wisc.edu
-* section: Tu Th 9:30-10:45 AM
-* status of implementation: all tests passed
+This C program inspects an ext2 disk image to recover deleted jpg files
+
+Usage
+
+- Command: `./runscan [disk image] [output directory]`
+- Output Format: Inode details, recovered jpg files, and files named after the original filenames.
+
+Developed and tested on Linux.
+
+Acknowledgments: Thanks to CS 537 Spring 2023 course staff at University of Wisconsin–Madison for providing project description and test cases.

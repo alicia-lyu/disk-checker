@@ -1,2 +1,4 @@
 output/*
+disk_images/*
 runscan
+slipdays.txt
