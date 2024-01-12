@@ -9,4 +9,4 @@ Usage
 
 Developed and tested on Linux.
 
-Acknowledgments: Thanks to CS 537 Spring 2023 course staff at University of Wisconsin–Madison for providing project description and test cases.
+Acknowledgments: Thanks to CS 537 Spring 2023 course staff at University of Wisconsin–Madison for providing the starter code, project description, and test cases.
