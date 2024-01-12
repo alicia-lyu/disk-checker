@@ -1,6 +1,6 @@
 # Ext2 Disk Image Checker
 
-This C program inspects an ext2 disk image to recover deleted jpg files
+This C program inspects an ext2 disk image to recover deleted jpg files.
 
 Usage
 
